@@ -1,0 +1,409 @@
+---
+title: "PCA analysis Snake Behaviour"
+author: "Roel M Wouters"
+date: '2022-08-23'
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+## Import dataset in Rstudio
+
+```{r}
+setwd("c:/Users/roelm/OneDrive/Documenten/Universiteit Leiden/MSc/Internship Snake Personality/StatisticsPipeline")
+getwd()
+library(readxl)
+MasterData=read_excel('PCA DataSheet.xlsx')
+
+
+MasterData$`Dry bite (Y/N)` = as.numeric(as.character(MasterData$`Personal ID`)) 
+MasterData$`Tongue flicks/m` = as.numeric(as.character(MasterData$`Tongue flicks/m`)) 
+MasterData$`Tongue flicks total` = as.numeric(as.character(MasterData$`Tongue flicks total`))
+
+DataNull <- MasterData[is.na(MasterData)] <- 0 
+```
+## Compute PCA
+
+```{r}
+
+PCA.v1 <- prcomp(MasterData[, c (6:9,12:15)], center = TRUE, scale. = FALSE)
+
+plot(PCA.v1)
+
+biplot(PCA.v1)
+
+library(factoextra)
+
+fviz_pca_ind(PCA.v1, col.ind="cos2", repel = TRUE, gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"))
+fviz_pca_var(PCA.v1)
+
+cor(MasterData[,c(4:19)], method = "pearson", use="complete.obs")
+
+
+
+library(PerformanceAnalytics)
+
+chart.Correlation(MasterData[,c(4:26)], histogram=TRUE, pch=19)
+
+Manova <- manova(cbind(`Mass (g)`, `MaxMinTA`, `MaxMinPD`, `Total distance`, `Mean velocity`, `Max velocity`, `Thigmotaxis`, `MaxMinAmplitude`, `MaxMinEquilibrium`)~MasterData$`Snakebite (Y/N)`, data=MasterData)
+
+
+summary.aov(Manova)
+
+
+MasterData[25,c("MaxMinEquilibrium", "Total activity (S)")] <- NA
+
+boxplot(`Total activity (s)`~`Snakebite (Y/N)`, data=MasterData)
+
+
+```
+
+```{r}
+## min-max scaling
+
+
+MasterData$Equilibrium_scaled <- scale(c(MasterData$Equilibrium))
+##MasterData$Amplitude_scaled <- scale(c(MasterData$Amplitude))
+##MasterData$Phase_difference_scaled <- scale
+MasterData$Amplitude_scaled <- MasterData$Amplitude/MasterData$Equilibrium
+
+##install.packages("recipes")
+library(caret)
+maxmin_Amplitude <- preProcess(as.data.frame(MasterData$Amplitude_scaled), method=c("range"))
+maxmin_Amp <- predict(maxmin_Amplitude, as.data.frame(MasterData$Amplitude_scaled))
+MasterData$MaxMinAmplitude <- maxmin_Amp[[1]]
+
+maxmin_Equilibrium <- preProcess(as.data.frame(MasterData$Equilibrium), method=c("range"))
+maxmin_Eq <- predict(maxmin_Equilibrium, as.data.frame(MasterData$Equilibrium))
+MasterData$MaxMinEquilibrium <- maxmin_Eq[[1]]
+
+maxmin_PD <- preProcess(as.data.frame(MasterData$`Phase difference`), method=c("range"))
+maxmin_PDP <- predict(maxmin_PD, as.data.frame(MasterData$`Phase difference`))
+MasterData$MaxMinPD <- maxmin_PDP[[1]]
+
+maxminTD <-preProcess(as.data.frame(MasterData$`Total distance`), method=c("range"))
+maxminTDp <- predict(maxminTD, as.data.frame(MasterData$`Total distance`))
+MasterData$MaxMinTD <- maxminTDp[[1]]
+
+maxminMxV <-preProcess(as.data.frame(MasterData$`Max velocity`), method=c("range"))
+maxminMxVp <- predict(maxminMxV, as.data.frame(MasterData$`Max velocity`))
+MasterData$MaxMinMxV <- maxminMxVp[[1]]
+
+maxminMnV <-preProcess(as.data.frame(MasterData$`Mean velocity`), method=c("range"))
+maxminMnVp <- predict(maxminMnV, as.data.frame(MasterData$`Mean velocity`))
+MasterData$MaxMinMnV <- maxminMnVp[[1]]
+
+maxminTx <-preProcess(as.data.frame(MasterData$`Thigmotaxis`), method=c("range"))
+maxminTxp <- predict(maxminTx, as.data.frame(MasterData$`Thigmotaxis`))
+MasterData$MaxMinTx <- maxminTxp[[1]]
+
+maxminTA <-preProcess(as.data.frame(MasterData$`Total activity (s)`), method=c("range"))
+maxminTAp <- predict(maxminTA, as.data.frame(MasterData$`Total activity (s)`))
+MasterData$MaxMinTA <- maxminTAp[[1]]
+
+Gender <- c("F","M","M","F","F","M","F","M","F","F","M","M","M","F","M","M","F",NA,NA,NA,NA,NA,"F","M","M")
+MasterDataRemoved$Gender <- Gender
+
+```
+
+## Figuren mooi
+
+```{r}
+
+## PCA
+library(usethis)
+library(devtools)
+##install_github("vqv/ggbiplot")
+library(ggbiplot)
+
+MasterData[25,c("MaxMinEquilibrium", "Total activity (S)")] <- NA
+MasterDataRemoved <- MasterData[-c(25),]
+
+pca.report <- prcomp(MasterDataRemoved[,c(4,5,20:27)], center=TRUE, scale.=TRUE)
+loadings_pca.report <- pca.report$loadings[,1:2]
+show(loadings_pca.report)
+
+## Plot by snakebite group
+ggbiplot(pca.report, ellipse=TRUE, obs.scale=1, var.scale=1, var.axes=FALSE, labels=rownames(MasterDataRemoved$`Personal ID`), groups=MasterDataRemoved$`Snakebite (Y/N)`)+ 
+  ggtitle("PCA of Behavioural Traits grouped by snakebite")+ 
+  theme(legend.position= "bottom")
+
+## Plot by species group
+ggbiplot(pca.report, ellipse=TRUE, obs.scale=1, var.scale=1,var.axes=FALSE, labels=rownames(MasterDataRemoved$`Personal ID`), groups=MasterDataRemoved$Species)+ 
+  ggtitle("PCA of Behavioural Traits grouped by species")+ 
+  theme(legend.position= "bottom")
+
+## correlation matrix
+
+library(corrplot)
+
+Corplot <- cor(MasterDataRemoved[,c(4,5,20:27)], method = "pearson", use="complete.obs")
+corrplot(Corplot, type="upper", order="hclust", addCoef.col="black", tl.col="black", col=COL2("RdYlBu"), tl.srt=25)
+
+##Boxplot
+
+ManovaSnakebite <- manova(cbind(`Mass (g)`, `MaxMinTA`, `MaxMinPD`, `MaxMinTD`, `MaxMinMxV`, `MaxMinMnV`, `MaxMinTx`, `MaxMinAmplitude`, `MaxMinEquilibrium`, MaxMinPD)~MasterDataRemoved$`Snakebite (Y/N)`, data=MasterDataRemoved)
+
+summary.aov(Manova)
+
+MasterDataRemoved["Snakebite (Y/N)"][MasterDataRemoved["Snakebite (Y/N)"] == 0] <- "No"
+MasterDataRemoved["Snakebite (Y/N)"][MasterDataRemoved["Snakebite (Y/N)"] == 1] <- "Yes"
+
+library(ggplot2)
+
+
+ggplot(MasterDataRemoved) + geom_boxplot(aes(x=`Snakebite (Y/N)`, y=`Equilibrium`), outlier.shape = NA, fill="332288", col="black") + labs(title= "Plot of Equilibrum per Snakebite", x="Snakebite", y="Equilibrium") + theme_classic()
+
+ManovaGender <- manova(cbind(`Mass (g)`, `MaxMinTA`, `MaxMinPD`, `MaxMinTD`, `MaxMinMxV`, `MaxMinMnV`, `MaxMinTx`, `MaxMinAmplitude`, `MaxMinEquilibrium`, MaxMinPD)~MasterDataRemoved$Gender, data=MasterDataRemoved)
+
+summary.aov(ManovaGender)
+
+ManovaSpecies <- manova(cbind(`Mass (g)`, `MaxMinTA`, `MaxMinPD`, `MaxMinTD`, `MaxMinMxV`, `MaxMinMnV`, `MaxMinTx`, `MaxMinAmplitude`, `MaxMinEquilibrium`, MaxMinPD)~MasterDataRemoved$Species, data=MasterDataRemoved)
+
+summary.aov(ManovaSpecies)
+
+AnovaSnakebite <- aov(MaxMinEquilibrium~`Snakebite (Y/N)`*Species, data=MasterDataRemoved)
+summary(AnovaSnakebite)
+
+AnovaGender<- aov(`Mass (g)`~Gender*Species, data =MasterDataRemoved)
+summary(AnovaGender)
+
+ggplot(MasterDataRemoved, aes(factor(Species), MaxMinEquilibrium, fill=factor(`Snakebite (Y/N)`))) +
+  geom_boxplot() + labs(title="Boxplot of equilibrium per species subgrouped by snakebite", x="Species", y="Equilibrium (standardized)") + theme_classic() + guides(fill=guide_legend(title="Snakebite Yes or No"))
+
+summary(MasterData)
+
+```
+
+```{r}
+MasterDataRemovedBA <- MasterDataRemoved[-c(18:22),]
+PCA.v2 <- prcomp(MasterDataRemovedBA[, c (4,7:10,13:16)], center = TRUE, scale. = FALSE)
+ggbiplot(PCA.v2, ellipse=TRUE, obs.scale=1, var.scale=1,var.axes=FALSE, labels=rownames(MasterDataRemovedBA$`Personal ID`), groups=MasterDataRemovedBA$Species)+ 
+  ggtitle("PCA of Behavioural Traits grouped by species")+ 
+  theme(legend.position= "bottom")
+
+library(corrplot)
+
+Corplot <- cor(MasterDataRemovedBA[,c(4,5,20:27)], method = "pearson", use="complete.obs")
+corrplot(Corplot, type="upper", order="hclust", addCoef.col="black", tl.col="black", col=COL2("RdYlBu"), tl.srt=25)
+
+MasterDataRemovedBA["Snakebite (Y/N)"][MasterDataRemovedBA["Snakebite (Y/N)"] == "No"] <- "0"
+MasterDataRemovedBA["Snakebite (Y/N)"][MasterDataRemovedBA["Snakebite (Y/N)"] == "Yes"] <- "1"
+MasterDataRemovedBA$`Snakebite (Y/N)` = as.numeric(MasterDataRemovedBA$`Snakebite (Y/N)`)
+
+library(lme4)
+library(Matrix)
+
+summary.aov(aov(MaxMinAmplitude ~ `Snakebite (Y/N)`*Species, data=MasterDataRemovedBA))
+
+summary.aov(manova(cbind(`Mass (g)`, `Amplitude_scaled`, `MaxMinTA`, `MaxMinPD`, `MaxMinTD`, `MaxMinMxV`, `MaxMinMnV`, `MaxMinTx`, `MaxMinAmplitude`, `MaxMinEquilibrium`)~MasterDataRemovedBA$`Snakebite (Y/N)`, data=MasterDataRemovedBA))
+
+
+ggplot(MasterDataRemoved, aes(factor(Species), Equilibrium, fill=factor(`Snakebite (Y/N)`))) +
+  geom_boxplot() + labs(title="Boxplot of Biting Response by Equilibrium per Species", x="Species", y="Equilibrium (s)") + theme_classic() + guides(fill=guide_legend(title="Snakebite Yes or No"))
+
+ggplot(MasterDataRemoved, aes(factor(`Snakebite (Y/N)`), Equilibrium)) +
+  geom_boxplot() + labs(title="Boxplot of Biting Response by Equilibrium", x="Biting Response", y="Equilibrium (s)") + theme_classic() + guides(fill=guide_legend(title="Snakebite Yes or No"))
+
+GenderBA <- c("F","M","M","F","F","M","F","M","F","F","M","M","M","F","M","M","F","F","M","M")
+MasterDataRemovedBA$Gender <- GenderBA
+
+ggplot(MasterDataRemovedBA, aes(factor(`Species`), `Mass (g)`, fill=factor(Gender))) +
+  geom_boxplot() + labs(title="Mass of Species", x="Species", y= "Mass (g)") + guides(fill=guide_legend(title="Gender"))
+
+ggplot(MasterDataRemovedBA, aes(factor(Species), Equilibrium, fill=factor(`Snakebite (Y/N)`))) +
+  geom_boxplot() + labs(title="Boxplot of Biting Response by Equilibrium per Species", x="Species", y="Equilibrium (s)") + theme_classic() + guides(fill=guide_legend(title="Snakebite Yes or No"))
+
+ggplot(MasterDataRemovedBA, aes(factor(`Snakebite (Y/N)`), Amplitude)) +
+  geom_boxplot(fill="332288", col="black") + labs(title="Boxplot of Biting Response by Amplitude per Species", x="Biting Response", y="Amplitude (s)") + theme_classic()
+
+MasterDataRemovedBA["Snakebite (Y/N)"][MasterDataRemovedBA["Snakebite (Y/N)"] == "0"] <- "No"
+MasterDataRemovedBA["Snakebite (Y/N)"][MasterDataRemovedBA["Snakebite (Y/N)"] == "1"] <- "Yes"
+MasterDataRemovedBA$`Snakebite (Y/N)` = as.character(MasterDataRemovedBA$`Snakebite (Y/N)`)
+
+
+
+
+library(ggplot2)
+ggplot(MasterDataRemovedBA, aes(`Thigmotaxis`, `Total distance`)) +
+  geom_smooth(col="blue", fill="lightblue") + labs(title= "Thigmotaxis by Total Distance", x="Thigmotaxis (%)", y="Total Distance (cm)")
+
+ggplot(MasterDataRemovedBA, aes(`Thigmotaxis`, `Mean velocity`)) +
+  geom_smooth(col="blue", fill="lightblue") + labs(title= "Thigmotaxis by Mean Velocity", x="Thigmotaxis (%)", y="Mean Velocity (cm/s)")
+
+
+
+
+```
+
+```{r}
+setwd("c:/Users/roelm/OneDrive/Documenten/Universiteit Leiden/MSc/Internship Snake Personality")
+getwd()
+library(readxl)
+ViperData=read_excel('ViperData.xlsx')
+
+ViperData$Personal_ID = as.character(ViperData$Personal_ID)
+ViperData$`Year of arrival` = as.character(ViperData$`Year of arrival`) 
+
+PCA.v3 <- prcomp(ViperData[, c (4,6:19)], center = TRUE, scale. = FALSE)
+ggbiplot(PCA.v3, ellipse=TRUE, obs.scale=1, var.scale=1, var.axes=FALSE, labels=rownames(ViperData$Personal_ID), groups=ViperData$Snakebite)+ 
+  ggtitle("PCA of Behavioural Traits grouped by snakebite")+ 
+  theme(legend.position= "bottom")
+
+library(corrplot)
+
+Corplot <- cor(ViperData[,c(4,6:19)], method = "pearson", use="complete.obs")
+corrplot(Corplot, type="upper", order="hclust", addCoef.col="black", tl.col="black", col=COL2("RdYlBu"), tl.srt=25)
+
+maxmin_Phase_shift <- preProcess(as.data.frame(ViperData1$Phase_shift), method=c("range"))
+maxmin_Ps <- predict(maxmin_Phase_shift, as.data.frame(ViperData1$Phase_shift))
+ViperData1$MaxMinPhase_shift <- maxmin_Ps[[1]]
+
+maxmin_Total_activity <- preProcess(as.data.frame(ViperData1$Total_activity), method=c("range"))
+maxmin_Ta <- predict(maxmin_Total_activity, as.data.frame(ViperData1$Total_activity))
+ViperData1$MaxMinTotal_activity <- maxmin_Ta[[1]]
+
+maxmin_Equilibrium <- preProcess(as.data.frame(ViperData1$Equilibrium), method=c("range"))
+maxmin_Eq <- predict(maxmin_Equilibrium, as.data.frame(ViperData1$Equilibrium))
+ViperData1$MaxMinEquilibrium <- maxmin_Eq[[1]]
+
+maxmin_Amplitude <- preProcess(as.data.frame(ViperData1$Amplitude_scaled), method=c("range"))
+maxmin_Amp <- predict(maxmin_Amplitude, as.data.frame(ViperData1$Amplitude_scaled))
+ViperData1$MaxMinAmplitude <- maxmin_Amp[[1]]
+
+maxmin_Tx40 <- preProcess(as.data.frame(ViperData1$Tx40), method=c("range"))
+maxmin_Tx <- predict(maxmin_Tx40, as.data.frame(ViperData1$Tx40))
+ViperData1$MaxMinTx <- maxmin_Tx[[1]]
+
+maxmin_ActivityTx <- preProcess(as.data.frame(ViperData1$Activity_tx), method=c("range"))
+maxmin_ATx <- predict(maxmin_ActivityTx, as.data.frame(ViperData1$Activity_tx))
+ViperData1$MaxMinActivity_Tx <- maxmin_ATx[[1]]
+
+maxmin_Activity<- preProcess(as.data.frame(ViperData1$Activity), method=c("range"))
+maxmin_A <- predict(maxmin_Activity, as.data.frame(ViperData1$Activity))
+ViperData1$MaxMinActivity <- maxmin_A[[1]]
+
+maxminTotal_distance <- preProcess(as.data.frame(ViperData1$Total_distance), method=c("range"))
+maxmin_Td <- predict(maxminTotal_distance, as.data.frame(ViperData1$Total_distance))
+ViperData1$MaxMinTotal_distance <- maxmin_Td[[1]]
+
+maxminMean_velocity <- preProcess(as.data.frame(ViperData1$Mean_velocity), method=c("range"))
+maxmin_Mnv <- predict(maxminMean_velocity, as.data.frame(ViperData1$Mean_velocity))
+ViperData1$MaxMinMean_velocity <- maxmin_Mnv[[1]]
+
+maxminMax_velocity <- preProcess(as.data.frame(ViperData1$Max_velocity), method=c("range"))
+maxmin_Mxv <- predict(maxminMax_velocity, as.data.frame(ViperData1$Max_velocity))
+ViperData1$MaxMinMax_velocity <- maxmin_Mxv[[1]]
+
+ViperData1$Amplitude_scaled <- ViperData1$Amplitude/ViperData1$Equilibrium
+
+Corplot <- cor(ViperData1[,c(4,6,17:26)], method = "pearson", use="complete.obs")
+corrplot(Corplot, type="upper", order="hclust", addCoef.col="black", tl.col="black", col=COL2("RdYlBu"), tl.srt=25)
+
+summary.aov(manova(cbind(Mass, MaxMinPhase_shift, MaxMinAmplitude, MaxMinEquilibrium, MaxMinTotal_activity, MaxMinTx, MaxMinActivity_Tx, MaxMinActivity, MaxMinTotal_distance, MaxMinMean_velocity, MaxMinMax_velocity)~Snakebite, data=ViperData1))
+
+ViperData1Removed <- ViperData1[-c(25),]
+ViperData1BARemoved <- ViperData1Removed[-c(8,11,21:23),]
+
+
+summary.aov(manova(cbind(Mass, MaxMinPhase_shift, Amplitude_scaled, MaxMinAmplitude, MaxMinEquilibrium, MaxMinTotal_activity, MaxMinTx, MaxMinActivity_Tx, MaxMinActivity, MaxMinTotal_distance, MaxMinMean_velocity, MaxMinMax_velocity)~Snakebite, data=ViperData1BARemoved))
+
+Corplot <- cor(ViperData1BARemoved[,c(4,6,17:27)], method = "pearson", use="complete.obs")
+corrplot(Corplot, type="upper", order="hclust", addCoef.col="black", tl.col="black", col=COL2("RdYlBu"), tl.srt=25)
+
+## circular stats
+
+ViperData1BARemoved$Phase_shift_degrees <- c(289,134,190,133,241,136,168,171,214,211,172,185,135,78,241,98,219,104,67,239)
+
+ViperData1BARemoved$Phase_shift_radians <- ViperData1BARemoved$Phase_shift_degrees*pi/180
+
+library(circular)
+
+Circular_regression <- lm.circular(ViperData1Removed$Activity,ViperData1Removed$Phase_shift_radians,
+  control.circular = list())
+
+Watsons <- watson.two.test(ViperData1Removed$Phase_shift_radians, ViperData1Removed$Activity, alpha=0.05)
+print(Watsons)
+
+plot(ViperData1Removed$Total_distance, ViperData1Removed$Phase_shift_radians)
+
+Circular_regression$p.values
+
+t.test(ViperData1BARemoved$MaxMinPhase_shift, ViperData1BARemoved$MaxMinTotal_distance)
+
+ViperData1Removed$Snakebite = as.character(ViperData1Removed$Snakebite)
+ViperData1Removed["Snakebite"][ViperData1Removed["Snakebite"] == 0] <- "No"
+ViperData1Removed["Snakebite"][ViperData1Removed["Snakebite"] == 1] <- "Yes"
+
+PCA.v4 <- prcomp(ViperData1Removed[, c (4,6, 17:27)], center = TRUE, scale. = TRUE)
+ggbiplot(PCA.v4, ellipse=TRUE, obs.scale=1, var.scale=5, var.axes=FALSE,  labels=rownames(ViperData1Removed$Personal_ID), groups=ViperData1Removed$Snakebite)+ 
+  ggtitle("PCA of Behavioural Traits grouped by Biting Response")+ 
+  theme(legend.position= "bottom")
+
+ggbiplot(PCA.v4, ellipse=TRUE, obs.scale=1, var.scale=5, var.axes=FALSE, labels=rownames(ViperData1Removed$Personal_ID), groups=ViperData1Removed$Species)+ 
+  ggtitle("PCA of Behavioural Traits grouped by Species")+ 
+  theme(legend.position= "bottom")
+
+PCA.v5 <- prcomp(ViperData1BARemoved[, c (4,6, 17:27)], center = TRUE, scale. = TRUE)
+ggbiplot(PCA.v5, ellipse=TRUE, obs.scale=1, var.scale=5, var.axes=FALSE,  labels=rownames(ViperData1BARemoved$Personal_ID), groups=ViperData1BARemoved$Snakebite)+ 
+  ggtitle("PCA of Behavioural Traits grouped by Biting Response")+ 
+  theme(legend.position= "bottom")
+
+ViperData1BARemoved$Phase_shift_hours <- ViperData1BARemoved$Phase_shift*(2*pi/24)
+
+
+library(ggplot2)
+ggplot(ViperData1BARemoved, aes((`Phase_shift_hours`), `Total_distance`)) +
+  geom_smooth(col="blue", fill="lightblue") + labs(title= "Phase shift by Total Distance", x="Phase shift (hours)", y="Total Distance (cm)")
+
+ggplot(MasterDataRemovedBA, aes(`Thigmotaxis`, `Mean velocity`)) +
+  geom_smooth(col="blue", fill="lightblue") + labs(title= "Thigmotaxis by Mean Velocity", x="Thigmotaxis (%)", y="Mean Velocity (cm/s)")
+
+x=seq(0,24,1)
+yAt=327.19*sin((2*pi/24*x)+3.85)+373.80
+yBa=207.66*sin((2*pi/24*x)+3.14)+278.15
+yBj=170.63*sin((2*pi/24*x)+2.57)+129.85
+SinGraph<- data.frame(x,yAt,yBa,yBj)
+
+ggplot(SinGraph, aes(x)) +                   
+  geom_line(aes(y=yAt), colour="brown", size=2) +  
+  geom_line(aes(y=yBa), colour="orange", size=2) +
+  geom_line(aes(y=yBj), colour="black", size=2) +
+  scale_x_continuous(breaks = seq(0, 24, 1)) +
+  labs(title="Circadian rhythm per species", x="Circadian cycle (8AM-8AM)", y="Activity (s)") + theme_classic() 
+
+
+yNo=195.40*sin((2*pi/24*x)+3.06)+186.56		
+yYes=327.69*sin((2*pi/24*x)+3.11)+389.66
+SinGraphSb <- data.frame(x, yNo, yYes)
+
+ggplot(SinGraphSb, aes(x)) +                   
+  geom_line(aes(y=yNo), colour="red", size=2) +  
+  geom_line(aes(y=yYes), colour="turquoise", size=2) +
+  labs(title="Circadian rhythm per biting response (yes or no)", x="Circadian cycle (8AM-8AM)", y="Activity (s)") +     theme_classic() +  scale_x_continuous(breaks = seq(0, 24, 1))
+
+xBJ=seq(0,96,1)
+yBJ4274=101.79*sin((2*pi/24*xBJ)+3.01)+125.81
+yBJ4282=66.67*sin((2*pi/24*xBJ)+2.98)+81.1
+SingraphBJ4274 <- data.frame(xBJ, yBJ4274, yBJ4282)
+
+ggplot(SingraphBJ4274, aes(xBJ)) +                   
+  geom_line(aes(y=yBJ4274), colour="blue", size=2) +
+  ##geom_line(aes(y=yBJ4282), colour="blue", size=2) +
+  ##geom_hline(yintercept=125.81, colour="red") + 
+  ##geom_hline(yintercept=81.1, colour="red") + 
+  labs(title="Circadian rhythm Bothrops jararacussu 4274", x="Circadian cycles", y="Activity (s)") +     theme_classic() +  scale_x_continuous(breaks = seq(0, 96, 24))
+
+
+
+
+ ``` 
+
