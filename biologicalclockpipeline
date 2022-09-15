@@ -1,0 +1,206 @@
+"""
+Python
+
+Created on Wed Jun  9 14:43:38 2021
+
+@author: roelm
+"""
+
+import os
+import moviepy.editor
+from datetime import datetime
+import pandas as pd
+from pathlib import Path
+import math
+import matplotlib.pyplot as plt
+import numpy as np
+import statsmodels.api as sm
+from scipy.optimize import curve_fit
+from collections import deque
+from tkinter import filedialog
+from tkinter import *
+import cv2
+
+def with_opencv(filename):
+    video = cv2.VideoCapture(filename)
+    fps = video.get(cv2.CAP_PROP_FPS)
+    frame_count = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
+    duration = frame_count/fps
+    return duration
+
+def rotate(input_list, rotation_factor):
+    output_list = deque(input_list)
+    output_list.rotate(rotation_factor)
+    output_list = list(output_list)
+    return output_list
+
+def get_datetime_from_file(filename):
+    date = filename.split("_")[1]
+    date_year = int(date[:4])
+    date_month = int(date[4:6])
+    date_day = int(date[6:8])
+    time = file.split("_")[2]
+    date_hour = int(time[:2])
+    date_minutes = int(time[2:4])
+    date_seconds = int(time[4:6])
+    return date_year, date_month, date_day, date_hour, date_minutes, date_seconds
+
+
+root = Tk()
+root.withdraw()
+directory = filedialog.askdirectory()
+
+
+#directory = "C:\\Users\\roelm\\OneDrive\\Documenten\\Universiteit Leiden\\MSc\\Internship Snake Personality\\Activity Pattern Test\\R5\\R5C2Bj"
+
+days = []
+
+for root, subdirectories, files in os.walk(directory): # TODO: prevent looping twice over directory
+    for file in files:
+        if Path(file).suffix == '.avi' and file.split("_")[0] == "MDalarm":
+            year, month, day, hour, minutes, seconds = get_datetime_from_file(file)
+            creation_time = datetime(year, month, day, hour, minutes, seconds).timestamp() # timestamp() zet datetime om in seconden sinds epoch
+            creation_time += 14400 # de tijd in de bestandsnaam loopt 4 uur achter; 14400 seconden is 4 uur
+            days_since_epoch = int(creation_time / 86400) # 86400 secondes in een dag
+            
+            if days_since_epoch not in days:
+                days.append(days_since_epoch)
+
+hours = [*range(0, 24, 1)] # creëert een lijst [0, 1, ..., 22, 23]
+hours_dict = {}
+
+for hour in hours:
+    days_dict = {}
+    for day in days:
+        if day == min(days) and hour < 15:
+            next
+        elif day == max(days) and hour >= 11:
+            next
+        else:
+            days_dict[day] = 0
+    hours_dict[hour] = days_dict
+
+
+filenames = []
+creation_times = []
+times_since_midnight = []
+durations = []
+
+file_no = 0
+for root, subdirectories, files in os.walk(directory):
+    for file in files:
+        if Path(file).suffix == '.avi':
+            print(file)
+            filenames.append(file)
+            year, month, day, hour, minutes, seconds = get_datetime_from_file(file)
+            creation_time = datetime(year, month, day, hour, minutes, seconds).timestamp()
+            #creation_time += 14400 # de tijd in de bestandsnaam loopt 4 uur voor
+
+            days_since_epoch = int(creation_time / 86400)
+
+            cr_time = datetime.fromtimestamp(creation_time)
+            creation_times.append(cr_time)
+            midnight = cr_time.replace(hour=0, minute=0, second=0, microsecond=0)
+            time_since_midnight = cr_time - midnight
+            hours_since_midnight = int(math.floor(time_since_midnight.total_seconds()/60/60))
+            times_since_midnight.append(time_since_midnight)
+            #video = moviepy.editor.VideoFileClip(os.path.join(root, file))
+            #video_duration = int(video.duration)
+            video_duration = with_opencv(os.path.join(root, file))
+            durations.append(video_duration)
+            if days_since_epoch in hours_dict[hours_since_midnight]:
+                hours_dict[hours_since_midnight][days_since_epoch] += video_duration
+
+avgs = []
+stds = []
+
+for hour in hours_dict:
+    values = []
+    
+    for value in hours_dict[hour].values():
+        values.append(value)
+
+    hour_avg = int(np.mean(values))
+    hour_std = int(np.std(values))
+    
+    avgs.append(hour_avg)
+    stds.append(hour_std)
+
+
+total_dict = {'hour': hours, 'average': avgs, 'standard deviation': stds}
+df_dict = {"filenames": filenames, "creation_times": creation_times,
+           "times_since_midnight": times_since_midnight, "durations": durations}
+
+df = pd.DataFrame(data=df_dict)
+df_total = pd.DataFrame(data=total_dict)
+df.to_excel(os.path.join(directory, "df.xls"))
+df_total.to_excel(os.path.join(directory, "df_total.xls"))
+
+circadian_avgs = rotate(avgs, -8)
+circadian_stds = rotate(stds, -8)
+
+plt.figure(0)
+plt.errorbar(hours, circadian_avgs, yerr=circadian_stds, fmt='o')
+plt.xticks(hours)
+plt.ylabel('Activity in seconds')
+plt.xlabel('Circadian time')
+plt.title("Activity")
+plt.savefig(os.path.join(directory, "activity.png"))
+
+'''
+lowess_frac = 8
+lowess_avgs = []
+lowess_avgs.append(circadian_avgs)
+
+for i in range(lowess_frac):
+    lowess_avgs.append(rotate(circadian_avgs, 1*(i+1))) #TODO: Klopt niet!!!
+
+lowess_avgs_total = []
+for j in range(24):
+    lowess_avgs_total.append(np.mean([lowess_avgs[k][j] for k in range(lowess_frac)]))
+
+'''
+
+lowess = sm.nonparametric.lowess
+lowess_data = lowess(circadian_avgs, hours, frac=0.40, return_sorted=True)
+
+lowess_avgs_total = lowess_data[:, 1]
+
+
+def mysine(x, Amp, ph, mean):
+    return Amp * np.sin((((2*np.pi)/24)*x)+ph) + mean
+
+x = np.asarray([float(i) for i in hours])
+y = np.asarray(lowess_avgs_total)
+
+lowess_dict = {"hours": hours, "activity in seconds": y}
+df_lowess = pd.DataFrame(data=lowess_dict)
+df_lowess.to_excel(os.path.join(directory, "df_lowess.xls"))
+
+popt, pcov = curve_fit(mysine, x, y, p0=[300, np.pi, 200], bounds=([0, 0, 0], [3600, 2*np.pi, 3600])) # TODO: amplitude mag niet groter worden dan evenwichtstand
+yf = mysine(x, *popt)
+print(popt)
+
+args = ["amplitude", "fase", "evenwichtstand"]
+sine_args_dict = {"argument": args, "waarde": popt}
+df_sine_args = pd.DataFrame(data=sine_args_dict)
+df_sine_args.to_excel(os.path.join(directory, "df_sine_args.xls"))
+
+plt.figure(1)
+plt.errorbar(hours, circadian_avgs, yerr=circadian_stds, fmt='o')
+plt.plot(hours, y)
+plt.plot(hours, yf)
+plt.xticks(hours)
+plt.ylabel('Activity in seconds')
+plt.xlabel('Circadian time')
+plt.title("Lowess")
+plt.savefig(os.path.join(directory, "lowess_fit1.png"))
+
+plt.figure(2)
+plt.plot(hours, y)
+plt.plot(hours, yf)
+plt.xticks(hours)
+plt.ylabel('Activity in seconds')
+plt.xlabel('Circadian time')
+plt.title("Lowess")
+plt.savefig(os.path.join(directory, "lowess_fit2.png"))
