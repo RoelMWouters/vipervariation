@@ -1,0 +1,261 @@
+# Eerst moeten we de txt-bestanden inladen.
+We kunnen dit een voor een doen, maar we kunnen ook in een keer alle txt-bestanden in een map scannen:
+https://pynative.com/python-list-files-in-directory-with-extension-txt/
+
+Maak een map aan op je computer en zet hier alle txt-bestanden in.
+Let op dat je het absolute path moet opgeven.
+
+import glob
+
+# Maak een lijst "files" met de paths naar de txt-bestanden en print de lijst. path = r means raw (zonder escape characters)
+
+path = r'C:\Users\roelm\Documents\Data_analyse_tracking_data\txt_files\*.txt'
+files = glob.glob(path)
+print(files)
+
+# je code gaat hier
+
+files is een list, te herkennen aan de blokhaken, met daarin meerdere items (de txt-bestanden). Over een lijst kan je heen loopen:
+
+for item in list:
+    do someting
+
+# gebruik een for loop om de path te printen voor elk txt-bestand in je lijst "files" 
+
+# je code gaat hier
+
+for file in files: 
+    print(file)
+
+We hebben nu de path voor elk txt-bestand, maar we moeten de bestanden wel een voor een openen om de data die erin staat te kunnen lezen. Gelukkig zijn er genoeg libraries die csv-bestanden kunnen lezen. Mijn favoriet is Pandas:
+https://pandas.pydata.org/docs/reference/api/pandas.read_table.html
+
+We hebben straks ook numpy nodig, dus importeer die ook gelijk even.
+
+Let op dat de txt-bestanden beginnen met 1 regel, en dat daarna de header pas komt, dus die moeten we overslaan. Gebruik daarvoor: 
+
+skiprows=1.
+
+En de decimalen zijn aangegeven met een komma in plaats van een punt, dus dat moeten we ook aangeven. Gebruik daarvoor: 
+
+decimal=",".
+
+En er is blijkbaar een extra kolom waar geen data in staat dus die kunnen we ook weglaten. Gebruik daarvoor: 
+
+usecols=["t","x","y","v","a"].
+
+import pandas as pd
+import numpy as np
+
+# kopieer je for-loop uit het vorige code-veld. 
+# Maak een pandas dataframe voor elk txt-bestand met behulp van de pd.read_table()
+# print de dataframes
+
+# je code gaat hier
+
+for file in files: 
+    print(file)
+    df = pd.read_table(file, skiprows=1, decimal=",", usecols=["t","x","y","v","a"])
+    print(df)
+
+Nu kunnen we de NaN values verwijderen uit de tabel, maar alleen voor de x en y kolommen:
+https://towardsdatascience.com/how-to-drop-rows-in-pandas-dataframes-with-nan-values-in-certain-columns-7613ad1a7f25
+
+Ook bleek dat kolom v en a niet goed zijn omgezet naar float-type... Ik denk dat dat komt door de lege waardes (NaN) die in de kolommen staan. Dus die moeten we ook nog even handmatig omzetten. Gebruik daarvoor:
+
+df["v"] = df["v"].str.replace(',','.').astype(float)
+
+df["a"] = df["a"].str.replace(',','.').astype(float)
+
+# kopieer weer je for-loop uit het vorige code-veld
+# je code gaat hier
+
+for file in files: 
+    print(file)
+    df = pd.read_table(file, skiprows=1, decimal=",", usecols=["t","x","y","v","a"],
+                      dtype={"v":str, "a":str})
+    df = df.dropna(subset=['x', 'y'], how='all')
+    df["v"] = df["v"].str.replace(',','.').astype(float)
+    df["a"] = df["a"].str.replace(',','.').astype(float)
+    print(df)
+
+We kunnen nu kolommen toevoegen en formules invullen zoals we ook in Excel gewend zijn. We gebruiken hier de .apply() functie voor:
+https://www.delftstack.com/howto/python-pandas/pandas-create-column-based-on-other-columns/
+
+Laten we beginnen met te kijken of de slang in de outer ring zit.
+Voor de arcsin en square root hebben we wel een speciale library nodig:
+https://www.geeksforgeeks.org/numpy-arcsin-python/
+
+import numpy as np
+
+# conventie: constante variabelen schrijf je in hoofdletters:
+# OUTER_RING = 42.5
+
+# als voorbeeldje voor theta:
+# df["theta"] = df.apply(lambda row: np.arcsin(row.y / np.sqrt((row.x**2)+(row.y**2))), axis=1)
+
+# kopieer weer je for-loop uit het vorige code-veld
+# je code gaat hier
+
+OUTER_RING = 42.5
+
+for file in files: 
+    print(file)
+    df = pd.read_table(file, skiprows=1, decimal=",", usecols=["t","x","y","v","a"],
+                      dtype={"v":str, "a":str})
+    df = df.dropna(subset=['x', 'y'], how='all')
+    df["v"] = df["v"].str.replace(',','.').astype(float)
+    df["a"] = df["a"].str.replace(',','.').astype(float)
+    df["theta"] = df.apply(lambda row: np.arcsin(float(row.y) / np.sqrt((float(row.x)**2)+(float(row.y)**2))), axis=1)
+    df['y_max'] = df.apply(lambda row: np.sin(row.theta) * OUTER_RING, axis=1)
+    df['x_max'] = df.apply(lambda row: np.cos(row.theta) * OUTER_RING, axis=1)
+    df['in_ring'] = df.apply(lambda row: abs(float(row.x))>row.x_max and abs(float(row.y))>float(row.y_max), axis=1)
+    print(df)
+    
+
+Voor het berekenen van de totale afstand moeten we de x en y-afstand tussen elke opvolgende rij berekenen. Gelukkig heeft Pandas daar een functie voor:
+https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.diff.html
+
+En maak er dan gelijk even een absolute waarde van:
+https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.abs.html
+
+# kopieer weer je for-loop uit het vorige code-veld
+# je code gaat hier
+
+OUTER_RING = 42.5
+
+for file in files: 
+    print(file)
+    df = pd.read_table(file, skiprows=1, decimal=",", usecols=["t","x","y","v","a"],
+                      dtype={"v":str, "a":str})
+    df = df.dropna(subset=['x', 'y'], how='all')
+    df["v"] = df["v"].str.replace(',','.').astype(float)
+    df["a"] = df["a"].str.replace(',','.').astype(float)
+    df["theta"] = df.apply(lambda row: np.arcsin(float(row.y) / np.sqrt((float(row.x)**2)+(float(row.y)**2))), axis=1)
+    df['y_max'] = df.apply(lambda row: np.sin(row.theta) * OUTER_RING, axis=1)
+    df['x_max'] = df.apply(lambda row: np.cos(row.theta) * OUTER_RING, axis=1)
+    df['in_ring'] = df.apply(lambda row: abs(float(row.x))>row.x_max and abs(float(row.y))>float(row.y_max), axis=1)
+    df['x'] = df['x'].astype(float)
+    df['y'] = df['y'].astype(float)
+    
+    df['delta_x'] = df['x'].diff()
+    df['delta_y'] = df['y'].diff()
+    df['delta_x_y'] = df.apply(lambda row: np.sqrt((row.delta_x**2) + (row.delta_y**2)), axis=1)
+    print(df)
+
+We kunnen nu wat samenvattende statistiek uit de tabel halen.
+Je kan de df.describe() functie gebruiken om wat standaard statistieken te krijgen.
+Maar je kan ook zelf aggregation functies gebruiken:
+https://python-tricks.com/aggregation-in-pandas/
+
+# kopieer weer je for-loop uit het vorige code-veld
+# je code gaat hier    
+
+OUTER_RING = 42.5
+
+for file in files: 
+    print(file)
+    df = pd.read_table(file, skiprows=1, decimal=",", usecols=["t","x","y","v","a"],
+                      dtype={"v":str, "a":str})
+    df = df.dropna(subset=['x', 'y'], how='all')
+    df["v"] = df["v"].str.replace(',','.').astype(float)
+    df["a"] = df["a"].str.replace(',','.').astype(float)
+    df["theta"] = df.apply(lambda row: np.arcsin(float(row.y) / np.sqrt((float(row.x)**2)+(float(row.y)**2))), axis=1)
+    df['y_max'] = df.apply(lambda row: np.sin(row.theta) * OUTER_RING, axis=1)
+    df['x_max'] = df.apply(lambda row: np.cos(row.theta) * OUTER_RING, axis=1)
+    df['in_ring'] = df.apply(lambda row: abs(float(row.x))>row.x_max and abs(float(row.y))>float(row.y_max), axis=1)
+    df['x'] = df['x'].astype(float)
+    df['y'] = df['y'].astype(float)
+    
+    df['delta_x'] = df['x'].diff()
+    df['delta_y'] = df['y'].diff()
+    df['delta_x_y'] = df.apply(lambda row: np.sqrt((row.delta_x**2) + (row.delta_y**2)), axis=1)
+    v_max = df['v'].max()
+    print(f"Max velocity: {v_max} cm/s")  # formatted string: variable between {}
+    total_distance = df['delta_x_y'].sum()
+    print(f"Total Distance: {total_distance} cm")
+    if len(df[df["in_ring"] == True]) > 0:
+        percentage_outer_ring = df["in_ring"].value_counts(normalize=True)[True]
+    else:
+        percentage_outer_ring = 0
+    print(f"Percentage in outer ring: {percentage_outer_ring*100} %")
+
+We kunnen de data per txt-bestand ook weer opslaan als een Excel-bestand:
+https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.to_excel.html
+
+We kunnen de statistieken zelfs op een tweede sheet plaatsen:
+https://xlsxwriter.readthedocs.io/example_pandas_multiple.html
+
+Daarvoor moeten we wel eerst de statistieken in een losse dataframe zetten:
+https://www.geeksforgeeks.org/creating-a-pandas-dataframe-using-list-of-tuples/
+
+# kopieer weer je for-loop uit het vorige code-veld
+# je code gaat hier
+
+OUTER_RING = 37.50
+
+pers_ids = []
+total_dists = []
+max_vs = []
+percs_outer_ring = []
+
+statistics_data = []
+
+for file in files: 
+    print(file)
+    df = pd.read_table(file, skiprows=1, decimal=",", usecols=["t","x","y","v","a"],
+                      dtype={"v":str, "a":str})
+    df = df.dropna(subset=['x', 'y'], how='all')
+    df["v"] = df["v"].str.replace(',','.').astype(float)
+    df["a"] = df["a"].str.replace(',','.').astype(float)
+    df["theta"] = df.apply(lambda row: np.arcsin(float(row.y) / np.sqrt((float(row.x)**2)+(float(row.y)**2))), axis=1)
+    df['y_max'] = df.apply(lambda row: np.sin(row.theta) * OUTER_RING, axis=1)
+    df['x_max'] = df.apply(lambda row: np.cos(row.theta) * OUTER_RING, axis=1)
+    df['in_ring'] = df.apply(lambda row: abs(float(row.x))>row.x_max and abs(float(row.y))>float(row.y_max), axis=1)
+    df['x'] = df['x'].astype(float)
+    df['y'] = df['y'].astype(float)
+    
+    df['delta_x'] = df['x'].diff()
+    df['delta_y'] = df['y'].diff()
+    df['delta_x_y'] = df.apply(lambda row: np.sqrt((row.delta_x**2) + (row.delta_y**2)), axis=1)
+    
+    v_max = df['v'].max()
+    v_mean = df['v'].mean()
+    total_distance = df['delta_x_y'].sum()
+    if len(df[df["in_ring"] == True]) > 0:
+        percentage_outer_ring = df["in_ring"].value_counts(normalize=True)[True]
+    else:
+        percentage_outer_ring = 0
+    
+    activity = len(df[df.v > 0.5]) / len(df)
+    
+    if len(df[df.in_ring == True]) > 0:
+        activity_tx = len(df[(df.v > 0.5) & (df.in_ring == True)]) / len(df[df.in_ring == True])
+    else:
+        activity_tx = 0
+    
+    pers_id = file.split("\\")[-1][2:-8]
+    
+    data_out = [pers_id, v_max, v_mean, total_distance, 
+                percentage_outer_ring, activity, activity_tx]
+
+    statistics_data.append(data_out)
+
+statistics_df = pd.DataFrame(data=statistics_data, columns=["Personal id", "Max velocity", "Mean velocity",
+                                                            "Total distance", "Percentage in outer ring",
+                                                            "activity", "activity_tx"])
+print(statistics_df)
+statistics_df.to_excel(r"C:\Users\roelm\Documents\Data_analyse_tracking_data\txt_files\total_output.xlsx")
+
+# writer = pd.ExcelWriter(f"{file}_output.xlsx", engine='xlsxwriter')
+
+# df.to_excel(writer, sheet_name='Data')
+# statistics_df.to_excel(writer, sheet_name='Statistics')
+
+# writer.save()
+
+
+
+
+
+
